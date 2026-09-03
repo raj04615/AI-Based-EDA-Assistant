@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-Based EDA Assistant — Enterprise document analytics with AI-powered retrieval, table extraction, and page citations.">
+    <title>AI-Based EDA Assistant — Workspace</title>
+    
+    <!-- Google Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/static/style.css?v=2.0">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/></svg>">
+</head>
+<body class="theme-dark">
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <div id="app-container" class="app-container">
+
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="sidebar">
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73L13 2.27a2 2 0 0 0-2 0L4 6.27A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="7.5 4.21 12 6.81 16.5 4.21"/>
+                            <line x1="12" y1="22.08" x2="12" y2="11.73"/>
+                        </svg>
+                    </div>
+                    <div class="brand-title">
+                        <h2>EDA Assistant</h2>
+                        <span class="version-tag">v2.0 MVP</span>
+                    </div>
+                </div>
+
+                <!-- Theme Toggle Button -->
+                <button id="theme-toggle" class="icon-btn" title="Toggle Theme" aria-label="Toggle Theme">
+                    <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+            </div>
+
+            <!-- Drag & Drop Upload Trigger Card -->
+            <div id="drop-zone" class="drop-zone">
+                <input type="file" id="file-input" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip" hidden>
+                <div class="drop-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                </div>
+                <p class="drop-text">Drag & drop files here, or <span>browse</span></p>
+                <p class="drop-subtext">PDF, DOCX, PPTX, Excel, CSV, TXT, Images, ZIP (Max 25MB)</p>
+            </div>
+
+            <!-- Upload Ingestion Progress Container -->
+            <div id="ingestion-progress" class="ingestion-progress" hidden>
+                <div class="progress-header">
+                    <span id="progress-filename" class="progress-filename">Document.pdf</span>
+                    <span id="progress-percent" class="progress-percent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+                </div>
+                <p id="progress-status" class="progress-status">Uploading...</p>
+            </div>
+
+            <!-- Documents List Section -->
+            <div class="docs-section">
+                <div class="docs-header">
+                    <span>Documents</span>
+                    <span id="docs-count" class="docs-badge">0</span>
+                </div>
+                <ul id="docs-list" class="docs-list">
+                    <!-- Dynamic Document Items rendered by JS -->
+                </ul>
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <p>Enterprise Document Intelligence</p>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Pane -->
+        <main id="main-workspace" class="main-workspace">
+
+            <!-- Workspace Top Bar -->
+            <header class="workspace-header">
+                <div id="active-doc-info" class="active-doc-info">
+                    <h1 id="active-doc-title">Select a Document</h1>
+                    <div id="active-doc-meta" class="active-doc-meta">
+                        <span class="meta-item" id="meta-pages">0 pages</span>
+                        <span class="meta-item" id="meta-chunks">0 chunks</span>
+                        <span id="meta-status" class="status-badge status-idle">No Document Selected</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Chat Messages Container -->
+            <div id="chat-container" class="chat-container">
+
+                <!-- Empty State (No Document Selected) -->
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <h2>No Active Document Selected</h2>
+                    <p>Upload a new PDF report or select an existing document from the left sidebar to start analyzing data.</p>
+                </div>
+
+                <!-- Active Document Welcome & Sample Queries (Shown when document is ready) -->
+                <div id="doc-welcome-chips" class="doc-welcome-chips" hidden>
+                    <h3>Suggested Analytical Queries</h3>
+                    <div class="chips-container">
+                        <button class="sample-chip" data-query="Summarize the key financial highlights and major revenue metrics.">
+                            📈 Summarize key financial highlights
+                        </button>
+                        <button class="sample-chip" data-query="What are the primary operational risks and key challenges mentioned?">
+                            ⚠️ Major risks &amp; challenges
+                        </button>
+                        <button class="sample-chip" data-query="Provide a breakdown of top performing departments and key KPIs.">
+                            🎯 Department performance &amp; KPIs
+                        </button>
+                        <button class="sample-chip" data-query="Synthesize the executive summary and strategic recommendations.">
+                            📑 Executive summary &amp; recommendations
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Thread Messages list -->
+                <div id="chat-messages" class="chat-messages">
+                    <!-- Dynamic chat bubbles rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Sticky Chat Input Container -->
+            <div class="chat-input-container">
+                <form id="chat-form" class="chat-form">
+                    <textarea 
+                        id="question-input" 
+                        class="question-input" 
+                        placeholder="Ask an analytical question about the active document..." 
+                        rows="1" 
+                        disabled
+                    ></textarea>
+                    <button type="submit" id="send-btn" class="btn btn-primary" disabled aria-label="Send Question">
+                        <span class="btn-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                        </span>
+                    </button>
+                </form>
+                <div class="input-shortcut-hint">
+                    <span>Ask custom questions • Press <kbd>Enter ↵</kbd> to send • <kbd>Shift + Enter</kbd> for newline</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Interactive Citation Side Drawer -->
+        <aside id="citation-drawer" class="citation-drawer" hidden>
+            <div class="drawer-header">
+                <h3>Source Excerpt</h3>
+                <button id="close-drawer" class="icon-btn" aria-label="Close Source Drawer">&times;</button>
+            </div>
+            <div class="drawer-body">
+                <div class="drawer-meta">
+                    <span id="drawer-pages" class="drawer-badge">Page --</span>
+                    <span id="drawer-score" class="drawer-score">Score: --</span>
+                </div>
+                <div id="drawer-content" class="drawer-content">
+                    <!-- Rendered raw chunk text -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Backdrop overlay for citation drawer -->
+        <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+
+        <!-- Markdown Preview Modal -->
+        <div id="markdown-modal-backdrop" class="markdown-modal-backdrop" hidden>
+            <div class="markdown-modal" role="dialog" aria-modal="true" aria-labelledby="modal-doc-title">
+                <div class="modal-header">
+                    <div class="modal-title-group">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <h3 id="modal-doc-title">Document Markdown</h3>
+                    </div>
+                    <div class="modal-header-actions">
+                        <button id="copy-md-btn" class="btn btn-secondary btn-sm" title="Copy Markdown text">
+                            📋 Copy
+                        </button>
+                        <button id="download-md-btn" class="btn btn-primary btn-sm" title="Download .md file">
+                            ⬇️ Download .md
+                        </button>
+                        <button id="close-md-modal" class="icon-btn" aria-label="Close Markdown Modal">&times;</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <pre id="modal-markdown-content" class="markdown-code-view"><code>Loading markdown...</code></pre>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Application Script -->
+    <script src="/static/script.js?v=4.0"></script>
+</body>
+</html>

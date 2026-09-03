@@ -1,0 +1,295 @@
+================================================================================
+           AI-BASED EDA ASSISTANT v3.0 — OVERVIEW & WORKING
+================================================================================
+
+1. PROJECT OVERVIEW & PURPOSE
+-----------------------------
+The AI-Based EDA (Exploratory Data Analysis) Assistant is an enterprise-grade 
+Retrieval-Augmented Generation (RAG) system built to analyze organizational reports, 
+financial statements, annual filings, academic placement statistics, presentations,
+spreadsheets, and other data-heavy documents across 10+ file formats.
+
+Users can upload documents (individually or in bulk via ZIP archives) into namespaced 
+document storage, switch between documents in a modern split-pane workspace, view 
+normalized Markdown representations, ask natural-language analytical questions, and 
+receive streaming data-driven responses with interactive page/slide/row citations.
+
+
+2. KEY FEATURES & MVP CAPABILITIES
+----------------------------------
+- Multi-Format Document Support: Upload and analyze PDF, DOCX, PPTX, XLSX, CSV, 
+  TXT, Markdown (.md), and image files (PNG/JPG/JPEG with OCR via Tesseract).
+- ZIP Batch Upload: Upload a .zip archive containing multiple documents (up to 15 
+  files). Each file is validated, registered, and ingested independently with 
+  isolated background tasks. Nested ZIPs are rejected; unsupported files are skipped 
+  with detailed skip reasons.
+- Magic Byte Format Detection: File type is validated using binary signature 
+  inspection (magic bytes) before falling back to extension, preventing spoofed or 
+  corrupted uploads from entering the pipeline.
+- Multi-Document Namespacing: Vectors are isolated per document using Pinecone 
+  namespaces (`namespace=doc_id`). Each document's embeddings, chat history, and 
+  metadata are fully independent.
+- Canonical Markdown Normalization: All document formats are converted into a unified 
+  Markdown (.md) representation with YAML front matter (title, file_type, doc_id, 
+  ingested_at, page/slide/row count). The canonical Markdown is persisted to disk 
+  in the `processed/` directory and viewable through the in-app Markdown viewer.
+- Async Ingestion Pipeline: Non-blocking uploads with background parsing and 
+  real-time stage status polling:
+  `processing` → `parsing` → `chunking` → `embedding` → `indexing` → `ready`.
+- Table-Aware Extraction: Uses `pdfplumber` (PDF), `python-docx` (DOCX), 
+  `python-pptx` (PPTX), and `pandas`/`openpyxl` (XLSX/CSV) to extract structured 
+  tables into Markdown table format. Large Excel/CSV sheets are chunked into 50-row 
+  blocks per section.
+- Sentence-Aware Markdown Chunking: Canonical Markdown is chunked with 
+  section-heading awareness, table preservation (tables kept intact as table chunks), 
+  paragraph/sentence boundary splitting, and configurable chunk size/overlap.
+- Similarity Threshold Filtering: Rejects low-confidence vector matches (score 
+  < 0.35) to prevent hallucinations and irrelevant context injection.
+- Real-Time Streaming Responses: Token-by-token answer streaming using Server-Sent 
+  Events (SSE) via Groq's Llama 3.3 70B model.
+- Short-Term Conversational Memory: Retains the last 4 Q&A turns per document 
+  session to support natural follow-up queries with context continuity.
+- Optimistic UI Document Deletion: Documents are removed from the sidebar 
+  instantly (<10ms) via client-side optimistic update. SQLite records are deleted 
+  synchronously on the backend, while slow filesystem cleanup (upload files, 
+  processed Markdown) and Pinecone namespace purge are offloaded to background 
+  threads/tasks to avoid blocking the async event loop.
+- Polling Race Condition Guards: Status polling intervals are protected against 
+  re-adding deleted documents. Polls auto-stop when a document is removed from 
+  state or returns HTTP 404 from the backend, with double-checking after async 
+  fetch boundaries.
+- Modern Split-Pane UI: Dual-pane chat interface featuring drag-and-drop uploads, 
+  dark/light mode toggle, toast notifications, sample question chips, inline 
+  Markdown rendering, and interactive citation side drawers with similarity scores.
+- In-App Markdown Viewer: View the normalized Markdown representation of any 
+  document directly in the UI via a modal viewer.
+- Engineering Hygiene & Containerization: Docker container build (`Dockerfile`, 
+  `docker-compose.yml`), rate limiting (`slowapi`, 10/min uploads, 20/min queries), 
+  file size validation (25MB limit), MIME validation, and Pytest test suite.
+- Safe Database Migration: Existing SQLite databases are safely migrated via 
+  PRAGMA table_info introspection. New columns (`file_type`, `markdown_path`) are 
+  added non-destructively using ALTER TABLE only when missing.
+
+
+3. SYSTEM ARCHITECTURE & TECH STACK
+----------------------------------
++---------------------+---------------------------------------------------------+
+| Component           | Technology / Library Used                               |
++---------------------+---------------------------------------------------------+
+| Backend Framework   | Python 3.12+, FastAPI, Uvicorn, slowapi, asyncio        |
+| Database Registry   | SQLite3 (`eda_assistant.db`) with safe schema migration  |
+| Frontend            | HTML5, Vanilla CSS3 (Custom Variables), Vanilla JS      |
+| PDF & Table Parsing | pdfplumber, PyPDF                                       |
+| DOCX Parsing        | python-docx (paragraphs, tables, section splitting)     |
+| PPTX Parsing        | python-pptx (slide text, tables, speaker notes)         |
+| Excel/CSV Parsing   | pandas, openpyxl (multi-sheet, 50-row batch chunking)   |
+| Image OCR           | pytesseract, Pillow (PNG/JPG/JPEG/BMP/TIFF)             |
+| Text/Markdown       | Built-in (encoding fallbacks: utf-8, latin-1, cp1252)   |
+| Format Detection    | Magic byte signature inspection with extension fallback  |
+| Markdown Engine     | Custom normalization engine (YAML front matter + body)   |
+| Text Embeddings     | SentenceTransformers (BAAI/bge-small-en-v1.5, 384 dim)  |
+| Vector Database     | Pinecone (Serverless Index, Namespaced Cosine Search)    |
+| LLM Engine          | Groq API (Meta Llama 3.3 70B Versatile SSE Streaming)   |
+| Resilience          | Tenacity (Exponential Backoff Retries, 3 attempts)      |
+| Containerization    | Docker, Docker Compose                                  |
+| Test Suite          | Pytest (pipeline, multi-format, normalization tests)    |
++---------------------+---------------------------------------------------------+
+
+
+4. SUPPORTED DOCUMENT FORMATS
+----------------------------------
++-------------+----------------+---------------------------------------------------+
+| Extension   | Detected Type  | Extraction Method                                 |
++-------------+----------------+---------------------------------------------------+
+| .pdf        | pdf            | PyPDF text + pdfplumber table extraction           |
+| .docx       | docx           | python-docx paragraphs & tables (section split)   |
+| .pptx       | pptx           | python-pptx slide text, tables, speaker notes     |
+| .xlsx/.xls  | excel          | pandas + openpyxl (multi-sheet, 50-row batches)   |
+| .csv        | csv            | pandas with multi-encoding fallback               |
+| .txt/.log   | txt            | Plain text with encoding fallback                 |
+| .md         | md             | Markdown with encoding fallback                   |
+| .png/.jpg   | image          | pytesseract OCR text extraction                   |
+| .jpeg/.bmp  | image          | pytesseract OCR text extraction                   |
+| .tiff       | image          | pytesseract OCR text extraction                   |
+| .zip        | zip            | Batch extraction (up to 15 files per archive)     |
++-------------+----------------+---------------------------------------------------+
+
+
+5. STEP-BY-STEP WORKING MECHANISM
+----------------------------------
+
+[ PHASE 1: DOCUMENT UPLOAD & VALIDATION ]
+1. File Upload (/upload):
+   - User drags and drops a file (or ZIP archive) into the sidebar upload zone.
+   - FastAPI validates file size (<= 25MB), checks for empty payloads, and saves 
+     to a temporary file in the uploads/ directory.
+   - Magic byte signature detection (`ingestion.detect_file_type`) validates the 
+     actual file format (not just the extension) using binary header inspection.
+   - For ZIP archives: entries are iterated, nested ZIPs rejected, each valid file 
+     is extracted, format-validated, registered with its own doc_id, and dispatched 
+     to an isolated background ingestion task (up to 15 files per archive).
+
+[ PHASE 2: DOCUMENT INGESTION PIPELINE ]
+2. Format-Specific Extraction (`ingestion.extract_by_type`):
+   - Central router dispatches to the appropriate format-specific extractor:
+     * PDF: pdfplumber (tables → Markdown) + PyPDF (narrative text per page)
+     * DOCX: python-docx (paragraphs + tables, auto-split sections at ~1500 chars)
+     * PPTX: python-pptx (slide text + tables + speaker notes)
+     * Excel: pandas + openpyxl (multi-sheet, 50-row batch Markdown tables)
+     * CSV: pandas with multi-encoding fallback (utf-8, latin-1, cp1252, etc.)
+     * TXT/MD: encoding-safe plain text reading with paragraph-based sectioning
+     * Image: pytesseract OCR with Pillow image loading
+   - Output: Unified `pages_data` list of {page, page_label, text, tables}.
+
+3. Canonical Markdown Normalization (`ingestion.normalize_to_markdown`):
+   - All extracted content is converted into a single well-structured Markdown 
+     document with YAML front matter header containing metadata (title, file_type, 
+     doc_id, ingested_at, page/slide/row count).
+   - Tables are preserved in Markdown table syntax; lists retain clean formatting.
+   - The normalized Markdown file is persisted to `processed/{doc_id}.md`.
+
+4. Sentence-Aware Chunking (`ingestion.chunk_markdown`):
+   - Canonical Markdown content is chunked with structural heading awareness.
+   - Markdown tables are preserved intact as dedicated table chunks with labels.
+   - Narrative text is split by paragraph boundaries and sentence boundaries 
+     (using lookbehind regex on `.!?`) with configurable target size (600 chars) 
+     and overlap (80 chars).
+
+5. Embedding & Namespaced Upsert:
+   - SentenceTransformer (`bge-small-en-v1.5`) embeds chunks into 384-dimensional 
+     vectors with L2 normalization.
+   - Vectors are upserted to Pinecone under `namespace=doc_id` in batches of 100.
+   - Pinecone index dimension mismatch is auto-detected and the index is recreated 
+     if needed.
+   - SQLite status updated through each phase: parsing → chunking → embedding → 
+     indexing → ready (or failed with error message).
+
+[ PHASE 3: QUERY RETRIEVAL & STREAMING ]
+6. Streaming Question Submission (/ask/stream):
+   - User submits a natural-language question for the active document.
+
+7. Namespaced Search & Similarity Threshold (`retrieval.retrieve_chunks`):
+   - Question is embedded and Pinecone is queried under `namespace=doc_id` with 
+     Tenacity retry protection (3 attempts, exponential backoff).
+   - Matches scoring below 0.35 similarity threshold are discarded to prevent 
+     hallucinations.
+
+8. Session Memory & SSE Token Streaming (`retrieval.generate_answer_stream`):
+   - Recent Q&A turns (up to 4) are fetched from SQLite `chat_history` and merged 
+     into the Groq prompt for conversation continuity.
+   - Groq API (Llama 3.3 70B) streams response tokens back over HTTP SSE.
+   - Frontend appends tokens in real time, renders formatted Markdown, and displays 
+     interactive citation chips with page/slide/row references and similarity scores.
+   - Completed answers are persisted to SQLite chat history.
+
+[ PHASE 4: DOCUMENT MANAGEMENT ]
+9. Document Deletion (DELETE /documents/{doc_id}):
+   - Frontend performs optimistic UI removal (state update + re-render in <10ms).
+   - Backend deletes SQLite records immediately (<1ms), then offloads:
+     * Filesystem cleanup (upload file + processed .md) → background thread via 
+       `asyncio.to_thread` to avoid blocking the async event loop.
+     * Pinecone namespace purge → background task.
+   - Polling intervals are guarded: if a deleted doc_id is no longer in client 
+     state, polling auto-stops; if the backend returns 404, polling terminates; 
+     a post-fetch re-check prevents race conditions from in-flight responses.
+
+10. Markdown Viewer (GET /document/{doc_id}/markdown):
+    - Returns the raw normalized Markdown content for in-app display, with 
+      fallback path resolution to `processed/{doc_id}.md`.
+
+
+6. PROJECT FILE STRUCTURE
+-------------------------
+├── app.py                # FastAPI Web Server, API endpoints, rate limiter, 
+│                         #   ZIP batch upload, optimistic delete, background tasks
+├── ingestion.py          # Multi-format extraction (PDF/DOCX/PPTX/XLSX/CSV/TXT/
+│                         #   MD/Image), magic byte detection, Markdown normalization
+│                         #   engine, sentence-aware chunking, background pipeline
+├── retrieval.py          # Namespaced Pinecone search, score threshold, Tenacity 
+│                         #   retry protection, Groq SSE streaming, prompt builder
+├── database.py           # SQLite schema with safe migration, document CRUD, 
+│                         #   session memory (chat_history), cascade deletes
+├── rag.py                # Pipeline entry-point interface
+├── config.py             # Global constants, env validation, thresholds, 
+│                         #   supported extensions, directory paths
+├── PROJECT_OVERVIEW.txt  # Detailed project description and technical specification
+├── README.md             # Project overview & quick-start guide
+├── requirements.txt      # Python dependencies (21 packages)
+├── .env                  # Environment variables (API keys, index name)
+├── .env.example          # Template for required environment variables
+├── Dockerfile            # Container build specification
+├── docker-compose.yml    # Service compose setup
+├── tests/                # Pytest test suite
+│   ├── test_pipeline.py      # Core pipeline unit & integration tests
+│   ├── test_multi_format.py  # Multi-format extraction & upload tests
+│   └── test_normalization.py # Markdown normalization & chunking tests
+├── uploads/              # Local document storage directory (all formats)
+├── processed/            # Normalized Markdown output files ({doc_id}.md)
+├── static/               # Frontend assets
+│   ├── style.css             # CSS design system (dark/light themes, variables)
+│   └── script.js             # JS state management, SSE streaming, optimistic UI, 
+│                             #   polling guards, drag-and-drop, citation drawer
+└── templates/            # HTML templates
+    └── index.html            # Split-pane workspace layout
+
+
+7. API ENDPOINTS
+-------------------------
++--------+-----------------------------------+------------------------------------------+
+| Method | Path                              | Description                              |
++--------+-----------------------------------+------------------------------------------+
+| GET    | /                                 | Serve frontend workspace (index.html)    |
+| POST   | /upload                           | Upload document or ZIP (rate: 10/min)    |
+| GET    | /status/{doc_id}                  | Poll ingestion status for a document     |
+| GET    | /documents                        | List all registered documents             |
+| GET    | /documents/{doc_id}/history       | Retrieve chat history for a document     |
+| GET    | /document/{doc_id}/markdown       | View normalized Markdown representation  |
+| GET    | /documents/{doc_id}/markdown      | View normalized Markdown (alias)         |
+| DELETE | /documents/{doc_id}               | Delete document and associated resources |
+| POST   | /ask/stream                       | Stream Q&A response via SSE (rate: 20/min)|
++--------+-----------------------------------+------------------------------------------+
+
+
+8. HOW TO RUN THE PROJECT
+-------------------------
+Option A: Local Virtual Environment
+1. Create & activate virtual environment:
+   python -m venv venv
+   venv\Scripts\activate          (Windows)
+   source venv/bin/activate       (macOS/Linux)
+2. Install dependencies: pip install -r requirements.txt
+3. Configure `.env`:
+   GROQ_API_KEY=your_groq_api_key
+   PINECONE_API_KEY=your_pinecone_api_key
+   PINECONE_INDEX_NAME=eda-assistant
+4. (Optional) Install Tesseract OCR for image document support.
+5. Run tests:
+   python -m pytest tests/test_pipeline.py
+   python -m pytest tests/test_multi_format.py
+   python -m pytest tests/test_normalization.py
+6. Launch server: uvicorn app:app --reload
+7. Open browser: http://localhost:8000
+
+Option B: Docker Compose
+1. Ensure `.env` is configured.
+2. Run: docker-compose up --build
+3. Open browser: http://localhost:8000
+
+
+9. CONFIGURATION PARAMETERS
+-------------------------
++-------------------------+-------------------+-------------------------------------+
+| Parameter               | Default Value     | Description                         |
++-------------------------+-------------------+-------------------------------------+
+| EMBEDDING_MODEL         | bge-small-en-v1.5 | SentenceTransformer model name      |
+| EMBEDDING_DIMENSION     | 384               | Vector dimension                    |
+| LLM_MODEL               | llama-3.3-70b     | Groq LLM model                     |
+| CHUNK_SIZE              | 600               | Target characters per chunk         |
+| CHUNK_OVERLAP           | 80                | Overlap between chunks              |
+| TOP_K                   | 5                 | Chunks retrieved per query          |
+| SIMILARITY_THRESHOLD    | 0.35              | Minimum score to include a chunk    |
+| MAX_FILE_SIZE_MB        | 25                | Maximum upload file size            |
+| MAX_ZIP_FILES           | 15                | Maximum files per ZIP archive       |
+| MEMORY_TURNS            | 4                 | Q&A turns retained per session      |
++-------------------------+-------------------+-------------------------------------+
+================================================================================
